@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -ex
 
 AWS_CMD=$(which aws)
 
@@ -19,9 +19,20 @@ function track_error() {
 function get_lc_from_asg() {
     local _ASG_NAME=$1
     local _lc_name=$($AWS_CMD autoscaling describe-auto-scaling-groups --auto-scaling-group-names $_ASG_NAME \
-                 --query AutoScalingGroups[0].LaunchConfigurationName --output text)
+                              --query AutoScalingGroups[0].LaunchConfigurationName --output text)
     # Function returns : Launch Configuration Name from provided ASG
     echo $_lc_name
+}
+
+function get_registered_instances_from_elb() {
+    # Get list of instances registered in ELB
+    local _ELB_NAME=$1
+    log "Getting registered instances in ELB TG: $_ELB_NAME"
+    local _elb_instances=$($AWS_CMD elb describe-load-balancers --load-balancer-names $_ELB_NAME 
+                                    --query LoadBalancerDescriptions[0].Instances[*].InstanceId --output text | tr '\t' ' ')
+    log "$_elb_instances"
+    # Function returns: List of instances registered in ELB as "i-abcd i-1234 i-4567"
+    echo $_elb_instances
 }
 
 function get_registered_instances_from_alb_tg() {
@@ -60,6 +71,7 @@ function create_lc_from_instance_with_new_ami() {
 }
 
 function create_ami_by_instance_id() {
+    # Create AMI from Instance. And propagate tags from instance to new AMI and snapshot(s)
     local _INSTANCE_ID=$1
     local _instance_name=$($AWS_CMD ec2 describe-instances --instance-ids=$_INSTANCE_ID \
                                                 --query 'Reservations[0].Instances[0].Tags[?Key==`Name`].Value' --output text)
