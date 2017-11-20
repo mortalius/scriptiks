@@ -1,17 +1,17 @@
 #!/bin/bash
-set -ex
+set -e
 
 AWS_CMD=$(which aws)
 
 START_STOP_TIMEOUT_SEC=300
 
 function log() {
-    echo "`date +'%D %T'` : $1" 1>&2
+    echo "$(date +'%D %T') : $1" 1>&2
 }
 
 function track_error() {
     if [ $1 != "0" ]; then
-        log "Error occured at `date` : $2"
+        log "Error occured at $(date) : $2"
         exit $1
     fi
 }
@@ -21,18 +21,18 @@ function get_lc_from_asg() {
     local _lc_name=$($AWS_CMD autoscaling describe-auto-scaling-groups --auto-scaling-group-names $_ASG_NAME \
                               --query AutoScalingGroups[0].LaunchConfigurationName --output text)
     # Function returns : Launch Configuration Name from provided ASG
-    echo $_lc_name
+    echo "$_lc_name"
 }
 
 function get_registered_instances_from_elb() {
     # Get list of instances registered in ELB
     local _ELB_NAME=$1
     log "Getting registered instances in ELB TG: $_ELB_NAME"
-    local _elb_instances=$($AWS_CMD elb describe-load-balancers --load-balancer-names $_ELB_NAME 
+    local _elb_instances=$($AWS_CMD elb describe-load-balancers --load-balancer-names $_ELB_NAME \
                                     --query LoadBalancerDescriptions[0].Instances[*].InstanceId --output text | tr '\t' ' ')
     log "$_elb_instances"
     # Function returns: List of instances registered in ELB as "i-abcd i-1234 i-4567"
-    echo $_elb_instances
+    echo "$_elb_instances"
 }
 
 function get_registered_instances_from_alb_tg() {
@@ -45,22 +45,19 @@ function get_registered_instances_from_alb_tg() {
     log "$_tg_instance_list"
   
     # Function returns: List of instances registered in TG as "i-abcd i-1234 i-4567"
-    echo $_tg_instance_list
+    echo "$_tg_instance_list"
 }
 
 function create_lc_from_instance_with_new_ami() {
   # Create new Launch Configuration based on AS instance with AMI override
-  local _OLD_LC_NAME=$1
-  local _NEW_LC_NAME=$2
-  local _INSTANCE_ID=$3
-  local _AMI_ID=$4
+  local _NEW_LC_NAME=$1
+  local _INSTANCE_ID=$2
+  local _AMI_ID=$3
   # block device mapping is not specified as it should be automatically created based on new AMI bdm
   # local _lc_bdm=$($AWS_CMD autoscaling describe-launch-configurations \
   #             --launch-configuration-names $_OLD_LC_NAME \
   #             --query LaunchConfigurations[0].BlockDeviceMappings)
-  # echo $_lc_bdm
   log "Creating new LaunchConfiguration from instance with new AMI"
-  log "             Old LC Name:    $_OLD_LC_NAME"
   log "             New LC Name:    $_NEW_LC_NAME"
   log "             Instance:       $_INSTANCE_ID"
   log "             AMI ID:         $_AMI_ID"
@@ -81,8 +78,8 @@ function create_ami_by_instance_id() {
 
     # Create AMI from instance
     log "Creating AMI based on instance $_INSTANCE_ID (Name: $_instance_name) [$_instance_ip]"
-    local _ami_id=$($AWS_CMD ec2 create-image --instance-id $_INSTANCE_ID --name "$_instance_name-`date +'%y%m%d-%H-%M-%S'`" \
-                                        --description "AMI for $_instance_name  on `date +'%D %T'`" \
+    local _ami_id=$($AWS_CMD ec2 create-image --instance-id $_INSTANCE_ID --name "$_instance_name-$(date +'%y%m%d-%H-%M-%S')" \
+                                        --description "AMI for $_instance_name  on $(date +'%D %T')" \
                                         --query ImageId --output text)
     track_error $? "Creating AMI from $_instance_name [$_instance_ip]"
 
@@ -110,10 +107,10 @@ function create_ami_by_instance_id() {
                                             --query 'Images[0].BlockDeviceMappings[*].Ebs.SnapshotId' --output text | tr '\t' ' ')
 
     if [[ "$_instance_tags" != "None" ]] && [[ "$_instance_tags" != "" ]]; then
-        log "Tagging AMI $_ami_id with instance's tags: $_instance_tags"
+        log "Tagging AMI $_ami_id with instances tags: $_instance_tags"
         $AWS_CMD ec2 create-tags --resources $_ami_id --tags "$_instance_tags"
         for _id in $_snapshot_ids; do
-            log "Tagging snapshot $_id with instance's tags: $_instance_tags"
+            log "Tagging snapshot $_id with instances tags: $_instance_tags"
             $AWS_CMD ec2 create-tags --resources $_id --tags "$_instance_tags"
         done
     else
@@ -121,7 +118,7 @@ function create_ami_by_instance_id() {
     fi
 
     # Returning AMI ID 
-    echo $_ami_id
+    echo "$_ami_id"
 }
 
 function disable_autoscaling_by_instance_id()
@@ -153,15 +150,15 @@ function disable_autoscaling_by_instance_id()
         $AWS_CMD autoscaling suspend-processes --auto-scaling-group-name ${_as_group}
         track_error $? "Suspending launch of new instances on the autoscaling group."
         sleep 30
-        log "All process disabled on AS group ${_as_group}"
+        log "All processes has been disabled on AS group ${_as_group}"
       fi
     else
-      log "Instance doesn't belong to any AS group"
+      log "Instance doesnt belong to any AS group"
       _ASG_REQUIRES_ENABLING="FALSE"
       log "Setting _ASG_REQUIRES_ENABLING=$_ASG_REQUIRES_ENABLING"
     fi
     # Function returns: variable to control as group enable behavior
-    echo $_ASG_REQUIRES_ENABLING
+    echo "$_ASG_REQUIRES_ENABLING"
 }
 
 function update_asg_with_lc() {
@@ -254,20 +251,34 @@ export AWS_PROFILE="dbidev"
 export AWS_DEFAULT_REGION="eu-west-1"
 
 # INPUT VARS
-TG_NAME="Chariot"
+#TG_NAME="Chariot"
+ELB_NAME="ELB-Classic"
 ASG_NAME="Darky-ASG"
 LC_PREFIX="Darky-LC-SuperApp"
 
 
 # 1. Get one of the instances from TG
+
+# INSTANCE_LIST=($(get_registered_instances_from_elb $ELB_NAME))
+# if [ ${#INSTANCE_LIST[@]} -eq 0 ]; then
+#     log "No registered instances in ELB: $ELB_NAME. Exiting."
+#     exit 1
+# fi
+
+
+# 1. Get one of the instances from TG
 INSTANCE_LIST=($(get_registered_instances_from_alb_tg $TG_NAME))
+if [ ${#INSTANCE_LIST[@]} -eq 0 ]; then
+    log "No registered instances in TG: $TG_NAME. Exiting."
+    exit 1
+fi
 INSTANCE_ID=${INSTANCE_LIST[0]}
 
-# 2. Deploy
-echo "DEPLOY STEP HERE"
+# 2. Disable AS processes on AS group by InstanceId
+DO_ENABLE_ASG="$(disable_autoscaling_by_instance_id $INSTANCE_ID)"
 
-# 3. Disable AS processes on AS group by InstanceId
-DO_ENABLE_ASG=$(disable_autoscaling_by_instance_id $INSTANCE_ID)
+# 3. Deploy
+echo "DEPLOY STEP HERE"
 
 # 4. Stop instance prior to making AMI
 stop_instance $INSTANCE_ID
@@ -279,10 +290,9 @@ AMI_ID="$(create_ami_by_instance_id $INSTANCE_ID)"
 start_instance $INSTANCE_ID
 
 # 7. Create LC from Instance
-OLD_LC_NAME=$(get_lc_from_asg $ASG_NAME)
-NEW_LC_NAME="$LC_PREFIX-`date +'%y%m%d-%H-%M-%S'`"
+NEW_LC_NAME="$LC_PREFIX-$(date +'%y%m%d-%H-%M-%S')"
 wait_for_instance_state $INSTANCE_ID "running" $START_STOP_TIMEOUT_SEC
-create_lc_from_instance_with_new_ami $OLD_LC_NAME $NEW_LC_NAME $INSTANCE_ID $AMI_ID
+create_lc_from_instance_with_new_ami $NEW_LC_NAME $INSTANCE_ID $AMI_ID
 
 # 8. Update AS group with new LC
 update_asg_with_lc $ASG_NAME $NEW_LC_NAME
