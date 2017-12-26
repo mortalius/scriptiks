@@ -133,8 +133,7 @@ function disable_autoscaling_by_instance_id()
     # Checking if Autoscaling already had processes suspended or no
     local _asg_suspended_processes=$($AWS_CMD autoscaling describe-auto-scaling-groups \
                                             --auto-scaling-group-name $_as_group --output text \
-                                            --query AutoScalingGroups[0].SuspendedProcesses[*]) 
-
+                                            --query AutoScalingGroups[0].SuspendedProcesses[*].ProcessName)
     # Checking if AS group is set up for specified instance. And if it has been already suspended.
     # If suspended, then do nothing and set _ASG_REQUIRES_ENABLING=FALSE
     # If not suspended, then do suspend and set _ASG_REQUIRES_ENABLING=TRUE
