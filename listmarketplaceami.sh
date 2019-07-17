@@ -1,0 +1,34 @@
+#!/bin/bash -e
+# From https://gist.github.com/magnetikonline/e822a78a9b691d86d6e45626f8f0c977
+
+MARKETPLACE_URL_REGEXP="^https://aws.amazon.com/marketplace/pp/[A-Z0-9]{10}(\?|$)"
+MARKETPLACE_HTML_PRODUCTID_REGEXP="/marketplace/fulfillment\?productId=([a-f0-9-]+)"
+
+
+function exitError {
+
+    echo "Error: $1" >&2
+    exit 1
+}
+
+if [[ (-z $1) || (-z $2) ]]; then
+    echo "Usage: $(basename "$0") REGION MARKETPLACE_URL"
+    exit
+fi
+
+# sanity check that marketplace URL given at least looks like one
+if [[ ! $2 =~ $MARKETPLACE_URL_REGEXP ]]; then
+    exitError "the marketplace URL given doesn't appear to be valid"
+fi
+
+# fetch product ID from marketplace page source
+if [[ ! $(curl --silent "$2") =~ $MARKETPLACE_HTML_PRODUCTID_REGEXP ]]; then
+    exitError "unable to extract product ID from marketplace page"
+fi
+
+# list available AMI entities associated with marketplace product ID
+aws ec2 describe-images \
+    --region "$1" \
+    --filters "Name=name,Values=*-${BASH_REMATCH[1]}-*" \
+    --output text \
+    --query "reverse(sort_by(Images,&CreationDate))[].[join(':',[ImageId,CreationDate,Description])]"

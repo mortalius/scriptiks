@@ -134,6 +134,7 @@ function disable_autoscaling_by_instance_id()
     local _asg_suspended_processes=$($AWS_CMD autoscaling describe-auto-scaling-groups \
                                             --auto-scaling-group-name $_as_group --output text \
                                             --query AutoScalingGroups[0].SuspendedProcesses[*].ProcessName)
+
     # Checking if AS group is set up for specified instance. And if it has been already suspended.
     # If suspended, then do nothing and set _ASG_REQUIRES_ENABLING=FALSE
     # If not suspended, then do suspend and set _ASG_REQUIRES_ENABLING=TRUE
@@ -194,7 +195,7 @@ function enable_asg() {
 }
 
 function wait_for_instance_state() {
-    # Wait until instance transit to 
+    # Wait until instance transit to desired state
     local _INSTANCE_ID=$1
     local _DESIRED_STATE=$2
     local _WAIT_TIMEOUT=$3
@@ -256,8 +257,7 @@ ASG_NAME="Darky-ASG"
 LC_PREFIX="Darky-LC-SuperApp"
 
 
-# 1. Get one of the instances from TG
-
+# 1. Get one of the instances from ELB
 # INSTANCE_LIST=($(get_registered_instances_from_elb $ELB_NAME))
 # if [ ${#INSTANCE_LIST[@]} -eq 0 ]; then
 #     log "No registered instances in ELB: $ELB_NAME. Exiting."
